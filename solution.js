@@ -1,13 +1,21 @@
 import fs from "fs";
 
-// Read testcase.json
+// ==========================================
+// 1. Read testcase.json
+// ==========================================
+
 const data = JSON.parse(
     fs.readFileSync("./testcase.json", "utf8")
 );
 
-// Convert a number from any base to BigInt
+
+// ==========================================
+// 2. Convert value from any base to BigInt
+// ==========================================
+
 function convertToDecimal(value, base) {
     const digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+
     let result = 0n;
 
     base = Number(base);
@@ -17,7 +25,7 @@ function convertToDecimal(value, base) {
 
         if (digit < 0 || digit >= base) {
             throw new Error(
-                "Invalid digit " + ch + " for base " + base
+                `Invalid digit ${ch} for base ${base}`
             );
         }
 
@@ -27,7 +35,11 @@ function convertToDecimal(value, base) {
     return result;
 }
 
-// Greatest Common Divisor
+
+// ==========================================
+// 3. Greatest Common Divisor
+// ==========================================
+
 function gcd(a, b) {
     a = a < 0n ? -a : a;
     b = b < 0n ? -b : b;
@@ -41,9 +53,15 @@ function gcd(a, b) {
     return a;
 }
 
-// Fraction class
+
+// ==========================================
+// 4. Fraction Class
+// ==========================================
+
 class Fraction {
+
     constructor(num, den = 1n) {
+
         if (den === 0n) {
             throw new Error("Denominator cannot be zero");
         }
@@ -59,46 +77,67 @@ class Fraction {
         this.den = den / g;
     }
 
+
     add(other) {
+
         return new Fraction(
-            this.num * other.den + other.num * this.den,
+            this.num * other.den +
+            other.num * this.den,
+
             this.den * other.den
         );
     }
 
+
     multiply(other) {
+
         return new Fraction(
             this.num * other.num,
             this.den * other.den
         );
     }
 
+
     toString() {
+
         if (this.den === 1n) {
             return this.num.toString();
         }
 
-        return this.num.toString() + "/" + this.den.toString();
+        return `${this.num}/${this.den}`;
     }
 }
 
-// Lagrange interpolation at x = 0
+
+// ==========================================
+// 5. Lagrange Interpolation
+//    Calculate P(0)
+// ==========================================
+
 function lagrangeAtZero(points) {
+
     let result = new Fraction(0n);
 
     for (let i = 0; i < points.length; i++) {
+
         const xi = points[i].x;
         const yi = points[i].y;
 
         let term = new Fraction(yi);
 
         for (let j = 0; j < points.length; j++) {
-            if (i === j) continue;
+
+            if (i === j) {
+                continue;
+            }
 
             const xj = points[j].x;
 
             term = term.multiply(
-                new Fraction(-xj, xi - xj)
+                new Fraction(
+                    -xj,
+                    xi - xj
+                )
             );
         }
 
@@ -108,47 +147,115 @@ function lagrangeAtZero(points) {
     return result;
 }
 
-// Read n and k
+
+// ==========================================
+// 6. Read n and k
+// ==========================================
+
 const n = Number(data.keys.n);
 const k = Number(data.keys.k);
-
-// Read points
-const points = [];
-
-for (let i = 1; i <= n; i++) {
-    const item = data[String(i)];
-
-    const x = BigInt(i);
-    const y = convertToDecimal(item.value, item.base);
-
-    points.push({ x, y });
-}
 
 console.log("n =", n);
 console.log("k =", k);
 
-console.log("\nDecoded points:");
 
-for (const point of points) {
-    console.log(
-        "x = " + point.x.toString() +
-        ", y = " + point.y.toString()
+// ==========================================
+// 7. Read actual points from JSON
+// ==========================================
+
+// Do NOT assume keys are 1,2,3,4...
+// The JSON may contain 1,3,4,5,6...
+
+const pointKeys = Object.keys(data)
+    .filter(key => key !== "keys")
+    .sort((a, b) => Number(a) - Number(b));
+
+
+// Check that JSON contains enough points
+
+if (pointKeys.length < k) {
+    throw new Error(
+        `Not enough points. Found ${pointKeys.length}, but k = ${k}`
     );
 }
 
-// Generate combinations
+
+// ==========================================
+// 8. Decode points
+// ==========================================
+
+const points = [];
+
+for (const key of pointKeys) {
+
+    const item = data[key];
+
+    if (!item || item.value === undefined || item.base === undefined) {
+        throw new Error(
+            `Invalid point data for x = ${key}`
+        );
+    }
+
+    const x = BigInt(key);
+
+    const y = convertToDecimal(
+        item.value,
+        item.base
+    );
+
+    points.push({
+        x,
+        y
+    });
+}
+
+
+// ==========================================
+// 9. Display decoded points
+// ==========================================
+
+console.log("\nDecoded points:");
+
+for (const point of points) {
+
+    console.log(
+        `x = ${point.x}, y = ${point.y}`
+    );
+}
+
+
+// ==========================================
+// 10. Generate combinations
+// ==========================================
+
 function combinations(array, size) {
+
     const result = [];
 
     function generate(start, current) {
+
         if (current.length === size) {
-            result.push([...current]);
+
+            result.push([
+                ...current
+            ]);
+
             return;
         }
 
-        for (let i = start; i < array.length; i++) {
+        for (
+            let i = start;
+            i < array.length;
+            i++
+        ) {
+
             current.push(array[i]);
-            generate(i + 1, current);
+
+            generate(
+                i + 1,
+                current
+            );
+
             current.pop();
         }
     }
@@ -158,13 +265,28 @@ function combinations(array, size) {
     return result;
 }
 
-// Calculate secret for every k-point combination
-const allCombinations = combinations(points, k);
+
+// ==========================================
+// 11. Generate all k-point combinations
+// ==========================================
+
+const allCombinations = combinations(
+    points,
+    k
+);
+
+
+// ==========================================
+// 12. Calculate P(0) for every combination
+// ==========================================
 
 const frequency = new Map();
 
 for (const combination of allCombinations) {
-    const value = lagrangeAtZero(combination);
+
+    const value = lagrangeAtZero(
+        combination
+    );
 
     const key = value.toString();
 
@@ -174,20 +296,46 @@ for (const combination of allCombinations) {
     );
 }
 
-// Find most frequent result
+
+// ==========================================
+// 13. Find most frequent result
+// ==========================================
+
 let answer = null;
 let maxFrequency = 0;
 
 for (const [value, count] of frequency.entries()) {
+
     if (count > maxFrequency) {
+
         maxFrequency = count;
+
         answer = value;
     }
 }
 
-console.log("\nNumber of combinations =", allCombinations.length);
 
-console.log("\nMost frequent result:");
+// ==========================================
+// 14. Display result
+// ==========================================
+
+console.log(
+    "\nNumber of points =",
+    points.length
+);
+
+console.log(
+    "Number of combinations =",
+    allCombinations.length
+);
+
+console.log(
+    "\nMost frequent result:"
+);
+
 console.log(answer);
 
-console.log("Frequency:", maxFrequency);
+console.log(
+    "Frequency:",
+    maxFrequency
+);
