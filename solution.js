@@ -1,24 +1,21 @@
-
 import fs from "fs";
 
-// Read JSON file
+// Read testcase.json
 const data = JSON.parse(
     fs.readFileSync("./testcase.json", "utf8")
 );
 
-const n = Number(data.keys.n);
-const k = Number(data.keys.k);
-
-// Convert value from given base to BigInt
+// Convert a number from any base to BigInt
 function convertToDecimal(value, base) {
     const digits = "0123456789abcdefghijklmnopqrstuvwxyz";
     let result = 0n;
+
     base = Number(base);
 
     for (const ch of value.toLowerCase()) {
         const digit = digits.indexOf(ch);
 
-        if (digit === -1 || digit >= base) {
+        if (digit < 0 || digit >= base) {
             throw new Error(
                 "Invalid digit " + ch + " for base " + base
             );
@@ -30,7 +27,7 @@ function convertToDecimal(value, base) {
     return result;
 }
 
-// GCD
+// Greatest Common Divisor
 function gcd(a, b) {
     a = a < 0n ? -a : a;
     b = b < 0n ? -b : b;
@@ -44,11 +41,11 @@ function gcd(a, b) {
     return a;
 }
 
-// Fraction
+// Fraction class
 class Fraction {
     constructor(num, den = 1n) {
         if (den === 0n) {
-            throw new Error("Division by zero");
+            throw new Error("Denominator cannot be zero");
         }
 
         if (den < 0n) {
@@ -64,8 +61,7 @@ class Fraction {
 
     add(other) {
         return new Fraction(
-            this.num * other.den +
-            other.num * this.den,
+            this.num * other.den + other.num * this.den,
             this.den * other.den
         );
     }
@@ -86,7 +82,7 @@ class Fraction {
     }
 }
 
-// Lagrange interpolation P(0)
+// Lagrange interpolation at x = 0
 function lagrangeAtZero(points) {
     let result = new Fraction(0n);
 
@@ -97,9 +93,7 @@ function lagrangeAtZero(points) {
         let term = new Fraction(yi);
 
         for (let j = 0; j < points.length; j++) {
-            if (i === j) {
-                continue;
-            }
+            if (i === j) continue;
 
             const xj = points[j].x;
 
@@ -114,37 +108,86 @@ function lagrangeAtZero(points) {
     return result;
 }
 
-// Read the points
+// Read n and k
+const n = Number(data.keys.n);
+const k = Number(data.keys.k);
+
+// Read points
 const points = [];
 
 for (let i = 1; i <= n; i++) {
     const item = data[String(i)];
 
-    points.push({
-        x: BigInt(i),
-        y: convertToDecimal(item.value, item.base)
-    });
+    const x = BigInt(i);
+    const y = convertToDecimal(item.value, item.base);
+
+    points.push({ x, y });
 }
-
-// Use the first k required roots
-const selectedPoints = points.slice(0, k);
-
-// Calculate polynomial value at x = 0
-const answer = lagrangeAtZero(selectedPoints);
 
 console.log("n =", n);
 console.log("k =", k);
 
-console.log("\nSelected points:");
+console.log("\nDecoded points:");
 
-for (const point of selectedPoints) {
+for (const point of points) {
     console.log(
-        "x = " +
-        point.x.toString() +
-        ", y = " +
-        point.y.toString()
+        "x = " + point.x.toString() +
+        ", y = " + point.y.toString()
     );
 }
 
-console.log("\nAnswer:");
-console.log(answer.toString());
+// Generate combinations
+function combinations(array, size) {
+    const result = [];
+
+    function generate(start, current) {
+        if (current.length === size) {
+            result.push([...current]);
+            return;
+        }
+
+        for (let i = start; i < array.length; i++) {
+            current.push(array[i]);
+            generate(i + 1, current);
+            current.pop();
+        }
+    }
+
+    generate(0, []);
+
+    return result;
+}
+
+// Calculate secret for every k-point combination
+const allCombinations = combinations(points, k);
+
+const frequency = new Map();
+
+for (const combination of allCombinations) {
+    const value = lagrangeAtZero(combination);
+
+    const key = value.toString();
+
+    frequency.set(
+        key,
+        (frequency.get(key) || 0) + 1
+    );
+}
+
+// Find most frequent result
+let answer = null;
+let maxFrequency = 0;
+
+for (const [value, count] of frequency.entries()) {
+    if (count > maxFrequency) {
+        maxFrequency = count;
+        answer = value;
+    }
+}
+
+console.log("\nNumber of combinations =", allCombinations.length);
+
+console.log("\nMost frequent result:");
+console.log(answer);
+
+console.log("Frequency:", maxFrequency);
