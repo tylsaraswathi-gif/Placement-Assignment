@@ -1,299 +1,150 @@
+
 import fs from "fs";
 
 // Read JSON file
 const data = JSON.parse(
-    fs.readFileSync("testcase.json", "utf8")
+    fs.readFileSync("./testcase.json", "utf8")
 );
 
+const n = Number(data.keys.n);
+const k = Number(data.keys.k);
 
-// --------------------------------------------------
-// STEP 1: Convert value from given base to decimal
-// --------------------------------------------------
-
-function decodeValue(value, base) {
-
-    const chars = "0123456789abcdefghijklmnopqrstuvwxyz";
-
+// Convert value from given base to BigInt
+function convertToDecimal(value, base) {
+    const digits = "0123456789abcdefghijklmnopqrstuvwxyz";
     let result = 0n;
-    base = BigInt(base);
+    base = Number(base);
 
-    for (const c of value.toLowerCase()) {
+    for (const ch of value.toLowerCase()) {
+        const digit = digits.indexOf(ch);
 
-        const digit = chars.indexOf(c);
-
-        if (digit === -1 || BigInt(digit) >= base) {
+        if (digit === -1 || digit >= base) {
             throw new Error(
-                `Invalid digit '${c}' for base ${base}`
+                "Invalid digit " + ch + " for base " + base
             );
         }
 
-        result = result * base + BigInt(digit);
+        result = result * BigInt(base) + BigInt(digit);
     }
 
     return result;
 }
 
-
-// --------------------------------------------------
-// STEP 2: Read all points
-// --------------------------------------------------
-
-let points = [];
-
-for (const key in data) {
-
-    if (key === "keys") {
-        continue;
-    }
-
-    const x = BigInt(key);
-
-    const y = decodeValue(
-        data[key].value,
-        data[key].base
-    );
-
-    points.push({
-        x: x,
-        y: y
-    });
-}
-
-
-// Sort points by x
-points.sort((a, b) => {
-
-    if (a.x < b.x) return -1;
-    if (a.x > b.x) return 1;
-
-    return 0;
-});
-
-
-const n = Number(data.keys.n);
-const k = Number(data.keys.k);
-
-
-// --------------------------------------------------
-// STEP 3: GCD function
-// Used to simplify fractions
-// --------------------------------------------------
-
+// GCD
 function gcd(a, b) {
-
-    if (a < 0n) a = -a;
-    if (b < 0n) b = -b;
+    a = a < 0n ? -a : a;
+    b = b < 0n ? -b : b;
 
     while (b !== 0n) {
-
-        const temp = b;
-
-        b = a % b;
-        a = temp;
+        const temp = a % b;
+        a = b;
+        b = temp;
     }
 
     return a;
 }
 
+// Fraction
+class Fraction {
+    constructor(num, den = 1n) {
+        if (den === 0n) {
+            throw new Error("Division by zero");
+        }
 
-// --------------------------------------------------
-// STEP 4: Lagrange interpolation at x = 0
-// --------------------------------------------------
+        if (den < 0n) {
+            num = -num;
+            den = -den;
+        }
 
-function lagrangeAt0(pts) {
+        const g = gcd(num, den);
 
-    let resultNumerator = 0n;
-    let resultDenominator = 1n;
+        this.num = num / g;
+        this.den = den / g;
+    }
 
-    for (let i = 0; i < pts.length; i++) {
+    add(other) {
+        return new Fraction(
+            this.num * other.den +
+            other.num * this.den,
+            this.den * other.den
+        );
+    }
 
-        let numerator = 1n;
-        let denominator = 1n;
+    multiply(other) {
+        return new Fraction(
+            this.num * other.num,
+            this.den * other.den
+        );
+    }
 
-        for (let j = 0; j < pts.length; j++) {
+    toString() {
+        if (this.den === 1n) {
+            return this.num.toString();
+        }
 
+        return this.num.toString() + "/" + this.den.toString();
+    }
+}
+
+// Lagrange interpolation P(0)
+function lagrangeAtZero(points) {
+    let result = new Fraction(0n);
+
+    for (let i = 0; i < points.length; i++) {
+        const xi = points[i].x;
+        const yi = points[i].y;
+
+        let term = new Fraction(yi);
+
+        for (let j = 0; j < points.length; j++) {
             if (i === j) {
                 continue;
             }
 
-            // Numerator *= (0 - xj)
-            numerator *= -pts[j].x;
+            const xj = points[j].x;
 
-            // Denominator *= (xi - xj)
-            denominator *= (
-                pts[i].x - pts[j].x
+            term = term.multiply(
+                new Fraction(-xj, xi - xj)
             );
         }
 
-        const termNumerator =
-            pts[i].y * numerator;
-
-        const newNumerator =
-            resultNumerator * denominator +
-            termNumerator * resultDenominator;
-
-        const newDenominator =
-            resultDenominator * denominator;
-
-        const g = gcd(
-            newNumerator,
-            newDenominator
-        );
-
-        resultNumerator =
-            newNumerator / g;
-
-        resultDenominator =
-            newDenominator / g;
+        result = result.add(term);
     }
-
-    // Make denominator positive
-    if (resultDenominator < 0n) {
-
-        resultNumerator = -resultNumerator;
-        resultDenominator = -resultDenominator;
-    }
-
-    return {
-        numerator: resultNumerator,
-        denominator: resultDenominator
-    };
-}
-
-
-// --------------------------------------------------
-// STEP 5: Generate all combinations of k points
-// --------------------------------------------------
-
-function getCombinations(array, k) {
-
-    const result = [];
-
-    function backtrack(start, current) {
-
-        // We have selected k points
-        if (current.length === k) {
-
-            result.push([...current]);
-
-            return;
-        }
-
-        for (
-            let i = start;
-            i < array.length;
-            i++
-        ) {
-
-            current.push(array[i]);
-
-            backtrack(
-                i + 1,
-                current
-            );
-
-            current.pop();
-        }
-    }
-
-    backtrack(0, []);
 
     return result;
 }
 
+// Read the points
+const points = [];
 
-// --------------------------------------------------
-// STEP 6: Try every possible group of k points
-// --------------------------------------------------
+for (let i = 1; i <= n; i++) {
+    const item = data[String(i)];
 
-const combinations = getCombinations(
-    points,
-    k
-);
-
-console.log("Number of roots:", n);
-console.log("Required roots:", k);
-
-console.log(
-    "Total combinations:",
-    combinations.length
-);
-
-
-// --------------------------------------------------
-// STEP 7: Count how many times each secret appears
-// --------------------------------------------------
-
-const frequency = new Map();
-
-for (const combination of combinations) {
-
-    const result = lagrangeAt0(combination);
-
-    const key =
-        `${result.numerator}/${result.denominator}`;
-
-    if (frequency.has(key)) {
-
-        frequency.set(
-            key,
-            frequency.get(key) + 1
-        );
-
-    } else {
-
-        frequency.set(key, 1);
-    }
+    points.push({
+        x: BigInt(i),
+        y: convertToDecimal(item.value, item.base)
+    });
 }
 
+// Use the first k required roots
+const selectedPoints = points.slice(0, k);
 
-// --------------------------------------------------
-// STEP 8: Find the most common secret
-// --------------------------------------------------
+// Calculate polynomial value at x = 0
+const answer = lagrangeAtZero(selectedPoints);
 
-let bestSecret = null;
-let bestCount = 0;
+console.log("n =", n);
+console.log("k =", k);
 
-for (const [secret, count] of frequency) {
+console.log("\nSelected points:");
 
-    if (count > bestCount) {
-
-        bestSecret = secret;
-        bestCount = count;
-    }
+for (const point of selectedPoints) {
+    console.log(
+        "x = " +
+        point.x.toString() +
+        ", y = " +
+        point.y.toString()
+    );
 }
 
-
-// --------------------------------------------------
-// STEP 9: Convert fraction to final answer
-// --------------------------------------------------
-
-const [numString, denString] =
-    bestSecret.split("/");
-
-const finalNumerator = BigInt(numString);
-const finalDenominator = BigInt(denString);
-
-let finalSecret;
-
-if (finalDenominator === 1n) {
-
-    finalSecret = finalNumerator.toString();
-
-} else {
-
-    finalSecret =
-        `${finalNumerator}/${finalDenominator}`;
-}
-
-
-// --------------------------------------------------
-// OUTPUT
-// --------------------------------------------------
-
-console.log("\nFINAL SECRET:", finalSecret);
-console.log(
-    "Found in",
-    bestCount,
-    "combinations"
-);
+console.log("\nAnswer:");
+console.log(answer.toString());
